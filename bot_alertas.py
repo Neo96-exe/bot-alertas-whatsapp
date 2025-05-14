@@ -2,7 +2,7 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-# Configuração da API Z-API
+# Configurações da API Z-API
 ZAPI_ID = "3E11C001D24090423EED3EF0F02679BC"
 ZAPI_TOKEN = "ACB36F2DA2CAE524DC7ECA59"
 ZAPI_CLIENT_TOKEN = "F60283feb8a754753aad942f9fcc2c8f0S"
@@ -10,7 +10,7 @@ ZAPI_URL = f"https://api.z-api.io/instances/{ZAPI_ID}/token/{ZAPI_TOKEN}/send-te
 GRUPO_ID = "120363401162031107@g.us"
 NUM_TESTE = "5521959309325"
 
-# Controle de alertas enviados no dia
+# Controle de alertas únicos
 alertas_enviados = set()
 
 def enviar_mensagem(numero, mensagem):
@@ -42,7 +42,6 @@ Janela: {janela}
 
 ⚠️ Contratos pontuados pelo IQI geram medida disciplinar caso não estejam dentro da regra de execução. Qualquer pendência, sinalizar ao fiscal e suporte imediatamente.
 """
-
     elif tipo == "NR35":
         return f"""🪜 *Contrato Aderente ao Processo NR35* 
 
@@ -58,11 +57,8 @@ Janela: {janela}
 
 ⚠️ Atenção ao acionamento do botão escada no app Nota 10 e o mais importante: atenção à sua segurança.
 """
-
     elif tipo == "LOG":
-        extra = ""
-        if log_count >= 2:
-            extra = f"@{tecnico['TELEFONE_GESTOR']}"
+        extra = f"@{tecnico['TELEFONE_GESTOR']}" if log_count >= 2 else ""
         return f"""🔁 *Contrato com LOG para Validação*
 
 Contrato com histórico de retorno identificado. Revisar a execução e garantir que esteja dentro dos padrões.
@@ -78,6 +74,21 @@ Contador de LOG: {log_count}
 
 ⚠️ Contratos com retorno devem ser validados criteriosamente para evitar reincidência.
 """
+    elif tipo == "CERTIDAO":
+        return f"""📄 *Certidão de Atendimento Obrigatória*
+
+Este contrato está com status iniciado e deve obrigatoriamente conter evidência via Certidão de Atendimento, conforme norma da Claro.
+
+📌 Técnico: {tecnico['NOME']}
+Contrato: {contrato}
+Área: {area}
+Endereço: {endereco}
+Início: {inicio}
+Janela: {janela}
+@{tecnico['TELEFONE_FISCAL']}
+
+⚠️ A certidão deve ser gerada ainda durante o atendimento. Em caso de dúvida, sinalizar ao fiscal.
+"""
 
 def obter_tecnico(login, df_tecnicos):
     return df_tecnicos[df_tecnicos["LOGIN"] == login.upper()].iloc[0]
@@ -86,7 +97,6 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
     enviados = 0
     falhas = 0
     total = 0
-
     hoje = datetime.now().strftime("%Y-%m-%d")
 
     if tipo_alerta == "IQI":
@@ -103,21 +113,15 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
                  (df_toa["Tipo O.S 1"].str.contains("69", na=False)) & \
                  (df_toa["Contador de log"].fillna(0).astype(int) > 0)
 
+    elif tipo_alerta == "CERTIDAO":
+        filtro = (df_toa["Status da Atividade"].str.lower() == "iniciado")
+
+    else:
+        return enviados, falhas, total  # tipo inválido
+
     df_filtrado = df_toa[filtro]
 
-    # 👉 Faz o merge com a base de técnicos para trazer o SUPORTE
-    df_filtrado = df_filtrado.merge(
-        df_tecnicos[["LOGIN", "SUPORTE"]],
-        left_on="Login do Técnico",
-        right_on="LOGIN",
-        how="left"
-    )
-
-    # ⚠️ Verifica se o SUPORTE existe após o merge
-    if "SUPORTE" not in df_filtrado.columns:
-        raise KeyError("Coluna 'SUPORTE' não encontrada após o merge. Verifique a base de técnicos.")
-
-    agrupado = df_filtrado.groupby("SUPORTE")
+    agrupado = df_filtrado.groupby(df_filtrado["SUPORTE"] if "SUPORTE" in df_filtrado.columns else "Login do Técnico")
 
     for suporte, grupo in agrupado:
         for _, row in grupo.iterrows():
@@ -129,17 +133,31 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
             try:
                 tecnico = obter_tecnico(login, df_tecnicos)
                 mensagem = formatar_mensagem(
-                    tipo_alerta, tecnico, contrato, row["Área de Trabalho"],
-                    row["Endereço"], row["Início"], row["Janela de Serviço"],
+                    tipo_alerta, tecnico, contrato,
+                    row["Área de Trabalho"], row["Endereço"],
+                    row["Início"], row["Janela de Serviço"],
                     int(row.get("Contador de log", 0))
                 )
-                if enviar_mensagem(NUM_TESTE, mensagem):
-                    alertas_enviados.add(chave_alerta)
-                    enviados += 1
-                else:
-                    falhas += 1
-                total += 1
+                # Envia para privado do técnico, suporte, fiscal
+                for numero in [
+                    tecnico["TELEFONE_TECNICO"],
+                    tecnico["TELEFONE_SUPORTE"],
+                    tecnico["TELEFONE_FISCAL"],
+                ]:
+                    enviar_mensagem(numero, mensagem)
+                # Envia no grupo
+                enviar_mensagem_grupo(mensagem)
+                alertas_enviados.add(chave_alerta)
+                enviados += 1
             except Exception as e:
                 falhas += 1
+            total += 1
 
     return enviados, falhas, total
+
+def enviar_todos_os_alertas(df_toa, df_tecnicos):
+    totais = {"IQI": 0, "NR35": 0, "LOG": 0, "CERTIDAO": 0}
+    for tipo in totais.keys():
+        enviados, _, _ = processar_alertas(df_toa, df_tecnicos, tipo)
+        totais[tipo] = enviados
+    return totais
