@@ -105,10 +105,21 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
 
     df_filtrado = df_toa[filtro]
 
+    # 👉 Faz o merge com a base de técnicos para trazer o SUPORTE
+    df_filtrado = df_filtrado.merge(
+        df_tecnicos[["LOGIN", "SUPORTE"]],
+        left_on="Login do Técnico",
+        right_on="LOGIN",
+        how="left"
+    )
+
+    # ⚠️ Verifica se o SUPORTE existe após o merge
+    if "SUPORTE" not in df_filtrado.columns:
+        raise KeyError("Coluna 'SUPORTE' não encontrada após o merge. Verifique a base de técnicos.")
+
     agrupado = df_filtrado.groupby("SUPORTE")
 
     for suporte, grupo in agrupado:
-        mensagens = []
         for _, row in grupo.iterrows():
             contrato = row["Contrato"]
             login = row["Login do Técnico"]
