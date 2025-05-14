@@ -12,11 +12,11 @@ uploaded_base = st.file_uploader("📂 Enviar base de técnicos (.xlsx)", type="
 df_toa, df_tecnicos = None, None
 
 if uploaded_toa:
-    df_toa = pd.read_excel(uploaded_toa)
+    df_toa = pd.read_excel(uploaded_toa, engine='openpyxl')
     st.success("Extração TOA carregada!")
 
 if uploaded_base:
-    df_tecnicos = pd.read_excel(uploaded_base)
+    df_tecnicos = pd.read_excel(uploaded_tecnicos, engine='openpyxl')
     df_tecnicos.columns = [col.strip().upper().replace(" ", "_") for col in df_tecnicos.columns]
     st.success("Base de técnicos carregada!")
 
