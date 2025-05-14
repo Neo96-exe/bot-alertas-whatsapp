@@ -1,40 +1,62 @@
 import streamlit as st
 import pandas as pd
-from bot_alertas import processar_alertas
+from bot_alertas import verificar_iqi, verificar_escada, verificar_log
 
 st.set_page_config(page_title="Bot de Alertas - WhatsApp", layout="wide")
-st.title("📢 Bot de Alertas - WhatsApp (IQI • NR35 • LOG)")
+st.title("🤖 Bot de Alertas - Integração com WhatsApp")
 
-st.markdown("### 1. Upload de arquivos")
-uploaded_toa = st.file_uploader("📂 Enviar extração do TOA (.xlsx)", type="xlsx")
-uploaded_base = st.file_uploader("📂 Enviar base de técnicos (.xlsx)", type="xlsx")
+st.markdown("---")
+st.subheader("📁 Upload das Bases")
+
+uploaded_toa = st.file_uploader("Carregar extração TOA (.xlsx)", type=["xlsx"], key="toa")
+uploaded_tecnicos = st.file_uploader("Atualizar base de técnicos (.xlsx)", type=["xlsx"], key="tecnicos")
 
 df_toa, df_tecnicos = None, None
 
+# Leitura segura da base TOA
 if uploaded_toa:
-    df_toa = pd.read_excel(uploaded_toa, engine='openpyxl')
-    st.success("Extração TOA carregada!")
+    try:
+        df_toa = pd.read_excel(uploaded_toa, engine="openpyxl")
+        st.success("📄 Extração TOA carregada com sucesso.")
+    except Exception as e:
+        st.error(f"Erro ao carregar extração TOA: {e}")
 
-if uploaded_base:
-    df_tecnicos = pd.read_excel(uploaded_tecnicos, engine='openpyxl')
-    df_tecnicos.columns = [col.strip().upper().replace(" ", "_") for col in df_tecnicos.columns]
-    st.success("Base de técnicos carregada!")
+# Leitura segura da base de técnicos
+if uploaded_tecnicos:
+    try:
+        df_tecnicos = pd.read_excel(uploaded_tecnicos, engine="openpyxl")
+        st.success("📄 Base de técnicos carregada com sucesso.")
+    except Exception as e:
+        st.warning(f"⚠️ Erro ao carregar base de técnicos: {e}")
+else:
+    st.warning("⚠️ Base de técnicos não carregada. Algumas funções exigem essa base.")
 
-if df_toa is not None and df_tecnicos is not None:
-    st.markdown("### 2. Disparar alertas")
-    col1, col2, col3 = st.columns(3)
+st.markdown("---")
+st.subheader("🚀 Executar Alertas")
 
-    with col1:
-        if st.button("🚨 Alerta IQI"):
-            enviados, falhas, total = processar_alertas(df_toa.copy(), df_tecnicos, "IQI")
-            st.success(f"IQI: {enviados} enviados com sucesso | {falhas} falharam | Total: {total}")
+# Botão IQI
+if st.button("📌 Alerta de IQI"):
+    if df_toa is not None and df_tecnicos is not None:
+        resultado = verificar_iqi(df_toa.copy(), df_tecnicos)
+        st.success(resultado)
+    else:
+        st.error("❌ Carregue a extração TOA e a base de técnicos.")
 
-    with col2:
-        if st.button("🪜 Alerta NR35"):
-            enviados, falhas, total = processar_alertas(df_toa.copy(), df_tecnicos, "NR35")
-            st.success(f"NR35: {enviados} enviados com sucesso | {falhas} falharam | Total: {total}")
+# Botão NR35 (escada)
+if st.button("🪜 Alerta de NR35"):
+    if df_toa is not None and df_tecnicos is not None:
+        resultado = verificar_escada(df_toa.copy(), df_tecnicos)
+        st.success(resultado)
+    else:
+        st.error("❌ Carregue a extração TOA e a base de técnicos.")
 
-    with col3:
-        if st.button("🔁 Alerta LOG"):
-            enviados, falhas, total = processar_alertas(df_toa.copy(), df_tecnicos, "LOG")
-            st.success(f"LOG: {enviados} enviados com sucesso | {falhas} falharam | Total: {total}")
+# Botão LOG
+if st.button("🔁 Alerta de LOG"):
+    if df_toa is not None and df_tecnicos is not None:
+        resultado = verificar_log(df_toa.copy(), df_tecnicos)
+        st.success(resultado)
+    else:
+        st.error("❌ Carregue a extração TOA e a base de técnicos.")
+
+st.markdown("---")
+st.caption("📍 Desenvolvido por Wesley + ChatGPT | Versão de Produção")
