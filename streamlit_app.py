@@ -12,9 +12,9 @@ uploaded_tecnicos = st.file_uploader("📂 Atualizar Base de Técnicos", type=["
 
 df_toa, df_tecnicos = None, None
 if uploaded_toa:
-    df_toa = pd.read_excel(uploaded_toa)
+    df_toa = pd.read_excel(uploaded_toa, engine="openpyxl")
 if uploaded_tecnicos:
-    df_tecnicos = pd.read_excel(uploaded_tecnicos)
+    df_tecnicos = pd.read_excel(uploaded_tecnicos, engine="openpyxl")
 
 if df_toa is not None and df_tecnicos is not None:
     st.success("✅ Arquivos carregados com sucesso!")
