@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 import json
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-st.set_page_config(page_title="Bot de Alertas - Teste Parcial", layout="wide")
+st.set_page_config(page_title="Bot de Alertas - Teste Google Sheets", layout="wide")
 
-st.title("🚦 Validação Parcial do Bot de Alertas")
-
-st.markdown("Carregando o layout, upload da planilha e teste do segredo do Google...")
+st.title("📄 Validação do Google Sheets via Secrets")
 
 # Upload da planilha TOA
 uploaded_toa = st.file_uploader("📎 Carregar extração TOA (.xlsx)", type="xlsx")
@@ -19,13 +19,22 @@ if uploaded_toa:
     except Exception as e:
         st.error(f"Erro ao ler a planilha: {e}")
 
-# Testar leitura do secrets
 st.markdown("---")
-st.subheader("🔐 Teste de acesso ao Google Service Account")
+st.subheader("🔐 Teste de acesso ao Google Sheets")
 
+# Autenticando e lendo planilha Google
 try:
-    cred_inicio = json.loads(st.secrets["GOOGLE_SERVICE_ACCOUNT"])  # apenas testa leitura
-    st.success("✅ Secrets carregado corretamente.")
-    st.code(cred_inicio["client_email"])
+    SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    json_keyfile = json.loads(st.secrets["GOOGLE_SERVICE_ACCOUNT"])
+    CREDS = ServiceAccountCredentials.from_json_keyfile_dict(json_keyfile, SCOPE)
+    CLIENT = gspread.authorize(CREDS)
+
+    SHEET = CLIENT.open_by_url("https://docs.google.com/spreadsheets/d/1PsTOZU12b8ruzJcQTe6MiIYGRpqPnUaF7qryBEb9TEI").worksheet("alertas_enviados")
+    dados = SHEET.get_all_records()
+    df_sheet = pd.DataFrame(dados)
+
+    st.success("✅ Planilha 'alertas_enviados' carregada com sucesso!")
+    st.dataframe(df_sheet.head(), use_container_width=True)
+
 except Exception as e:
-    st.error(f"❌ Falha ao acessar secrets: {e}")
+    st.error(f"❌ Erro ao acessar Google Sheets: {e}")
