@@ -18,8 +18,8 @@ st.markdown("<div class='title'>📢 Bot de Alertas - WhatsApp</div>", unsafe_al
 st.markdown("**Gerencie e dispare alertas automatizados para a operação via WhatsApp.**")
 
 # === Upload de Arquivos ===
-uploaded_toa = st.file_uploader("📎 Carregar extração TOA (.xlsx obrigatório)", type="xlsx")
-uploaded_tecnicos = st.file_uploader("📎 Atualizar base de técnicos (opcional)", type=["xlsx", "csv"])
+uploaded_toa = st.file_uploader("📌 Carregar extração TOA (.xlsx obrigatório)", type="xlsx")
+uploaded_tecnicos = st.file_uploader("📌 Atualizar base de técnicos (opcional)", type=["xlsx", "csv"])
 
 df_toa, df_tecnicos = None, None
 if uploaded_toa:
@@ -44,7 +44,7 @@ if df_toa is not None:
             st.success(f"✅ IQI: {enviados} enviados / ❌ {falhas} falhas (Total: {total})")
 
     with col2:
-        if st.button("🪜 Alerta NR35"):
+        if st.button("🪼 Alerta NR35"):
             enviados, falhas, total, df_resumo = processar_alertas(df_toa.copy(), df_tecnicos, "NR35")
             st.success(f"✅ NR35: {enviados} enviados / ❌ {falhas} falhas (Total: {total})")
 
@@ -76,21 +76,18 @@ if df_toa is not None:
     st.markdown("---")
     st.subheader("💬 Envio manual de mensagens")
 
-    # Botão 1: Teste individual
     if st.button("🧪 Enviar mensagem de teste"):
         if enviar_mensagem("5521959309325", "🚀 Teste de envio via Bot de Alertas - WhatsApp"):
             st.success("✅ Mensagem de teste enviada com sucesso.")
         else:
             st.error("❌ Falha ao enviar a mensagem.")
 
-    # Botão 1.1: Teste no grupo
     if st.button("🧪 Enviar mensagem de teste no grupo"):
         if enviar_mensagem_grupo("[TESTE] Mensagem enviada no grupo com sucesso via Z-API"):
             st.success("✅ Mensagem enviada no grupo com sucesso.")
         else:
             st.error("❌ Falha ao enviar mensagem no grupo.")
 
-    # Botão 2: Envio em massa
     st.markdown("### 📢 Enviar mensagem para grupo de contatos")
     grupo = st.selectbox("Grupo destino", ["Técnicos", "Fiscais", "Suportes"])
     mensagem_massa = st.text_area("📨 Digite a mensagem para envio em massa")
@@ -114,7 +111,6 @@ if df_toa is not None:
                     falhas += 1
             st.success(f"✅ Enviados: {enviados} | ❌ Falhas: {falhas}")
 
-    # Botão 3: Mensagem personalizada
     st.markdown("### ✍️ Enviar mensagem personalizada")
     numero_manual = st.text_input("Número com DDD (ex: 5521999999999)")
     mensagem_manual = st.text_area("✏️ Mensagem personalizada")

@@ -1,8 +1,10 @@
 import pandas as pd
 from datetime import datetime
 import requests
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-# CONFIGURAÇÕES DA Z-API
+# ==================== CONFIGURAÇÕES ====================
 ZAPI_ID = "3E11C001D24090423EED3EF0F02679BC"
 ZAPI_TOKEN = "ACB36F2DA2CAE524DC7ECA59"
 CLIENT_TOKEN = "F60283feb8a754753aad942f9fcc2c8f0S"
@@ -13,11 +15,26 @@ HEADERS = {
     "Client-Token": CLIENT_TOKEN
 }
 
-GRUPO_ID = "120363401162031107@g.us"  # Corrigido: agora com @g.us
+GRUPO_ID = "120363401162031107-group"
 
-# Cache diário de envios para evitar duplicidade
-cache_envios = set()
+# ==================== GOOGLE SHEETS ====================
+SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+CREDS = ServiceAccountCredentials.from_json_keyfile_name("bot-alertas-whatsapp-b84759994ee2.json", SCOPE)
+CLIENT = gspread.authorize(CREDS)
+SHEET = CLIENT.open_by_url("https://docs.google.com/spreadsheets/d/1PsTOZU12b8ruzJcQTe6MiIYGRpqPnUaF7qryBEb9TEI").worksheet("alertas_enviados")
 
+# ==================== FUNÇÕES GOOGLE SHEETS ====================
+def carregar_alertas_enviados(sheet):
+    registros = sheet.get_all_records()
+    return set((r['data'], r['login'], r['contrato'], r['tipo_alerta']) for r in registros)
+
+def registrar_alerta_enviado(sheet, data, login, contrato, tipo_alerta):
+    nova_linha = [data, login, contrato, tipo_alerta]
+    sheet.append_row(nova_linha)
+
+alertas_enviados = carregar_alertas_enviados(SHEET)
+
+# ==================== Z-API ====================
 def enviar_mensagem(numero, mensagem):
     try:
         payload = {"phone": numero, "message": mensagem}
@@ -31,15 +48,15 @@ def enviar_mensagem_grupo(mensagem):
         payload = {"phone": GRUPO_ID, "message": mensagem}
         response = requests.post(f"{BASE_URL}/send-text", json=payload, headers=HEADERS)
         return response.status_code == 200
-    except Exception as e:
-        print(f"Erro ao enviar para grupo: {e}")
+    except:
         return False
 
+# ==================== LÓGICA DE ALERTAS ====================
 def obter_tecnico(login, df_tecnicos):
     return df_tecnicos[df_tecnicos["LOGIN"] == login.upper()].iloc[0]
 
 def gerar_alertas_log(log_count):
-    return "!" * int(log_count)
+    return "⚠️" * int(log_count)
 
 def formatar_mensagem(tipo, tecnico, contrato, area, endereco, inicio, janela, log_count=0):
     hierarquia = f"""Gestor: {tecnico['GESTOR']}
@@ -47,14 +64,12 @@ Suporte: {tecnico['SUPORTE']}
 Fiscal: {tecnico['FISCAL']}
 Técnico: {tecnico['NOME']}"""
 
-    marcacoes = f"@{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']}"
+    marcacoes = f"@{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']} @{tecnico['TELEFONE_GESTOR']}"
 
     if tipo == "IQI":
-        return f"""[Alerta de Autoinspeção - IQI]
+        return f"""Atenção ao processo de autoinspeção e ao padrão de instalação. Seguir dentro das normas da Claro, o contrato será auditado dentro de 5 dias.
 
-Atenção ao processo de autoinspeção e ao padrão de instalação. Seguir dentro das normas da Claro, o contrato será auditado dentro de 5 dias.
-
-{hierarquia}
+📌 Técnico: {tecnico['NOME']}
 Contrato: {contrato}
 Área: {area}
 Endereço: {endereco}
@@ -62,14 +77,14 @@ Início: {inicio}
 Janela: {janela}
 {marcacoes}
 
-Contratos pontuados pelo IQI geram medida disciplinar caso não estejam dentro da regra de execução. Qualquer pendência, sinalizar ao fiscal e suporte imediatamente."""
+Atenção, contratos pontuados pelo IQI geram medida disciplinar caso não estejam dentro da regra de execução. Qualquer pendência, sinalizar ao fiscal e suporte imediatamente."""
 
     elif tipo == "NR35":
         return f"""[Contrato Aderente ao Processo NR35]
 
 Detectado uso de escada neste contrato. Certifique-se de seguir corretamente os protocolos de segurança NR35 definidos pela Claro.
 
-{hierarquia}
+📌 Técnico: {tecnico['NOME']}
 Contrato: {contrato}
 Área: {area}
 Endereço: {endereco}
@@ -81,28 +96,25 @@ Atenção ao acionamento do botão escada no app Nota 10 e o mais importante: at
 
     elif tipo == "LOG":
         alertas = gerar_alertas_log(log_count)
-        return f"""[Contrato com LOG para Validação] {alertas}
+        return f"""{alertas} Alerta de retorno ofensivo.
 
-Contrato com histórico de retorno identificado. Revisar a execução e garantir que esteja dentro dos padrões.
-
-{hierarquia}
+📌 Técnico: {tecnico['NOME']}
 Contrato: {contrato}
 Área: {area}
 Endereço: {endereco}
 Início: {inicio}
 Janela: {janela}
 Contador de LOG: {log_count}
-{marcacoes} @{tecnico['TELEFONE_GESTOR']}
+{marcacoes}
 
-Contratos com retorno devem ser validados criteriosamente para evitar reincidência.
-Sair do local somente após validar com o fiscal/suporte responsáveis que todos os serviços estão funcionando."""
+O contrato possui {log_count} LOG(s). Verificar o padrão de instalação, organização, etiquetação, checklist de evidência e validação em campo. Medidas disciplinares serão aplicadas em reincidências."""
 
     elif tipo == "CERTIDAO":
         return f"""[Certidão de Atendimento Obrigatória]
 
 Contrato iniciado. Realizar a certidão conforme padrão Claro para evitar retorno técnico.
 
-{hierarquia}
+📌 Técnico: {tecnico['NOME']}
 Contrato: {contrato}
 Área: {area}
 Endereço: {endereco}
@@ -117,7 +129,6 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
     hoje = datetime.now().strftime("%Y-%m-%d")
     df_resumo = pd.DataFrame()
 
-    # Filtros por tipo
     if tipo_alerta == "IQI":
         filtro = (df_toa["Status da Atividade"].str.lower() == "iniciado") & \
                  (df_toa["Tipo O.S 1"].str.lower().str.contains("adesao")) & \
@@ -141,7 +152,7 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
         login = row["Login do Técnico"]
         chave = (hoje, login, contrato, tipo_alerta)
 
-        if chave in cache_envios:
+        if chave in alertas_enviados:
             continue
 
         try:
@@ -162,11 +173,14 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
                 ])
                 grupo = enviar_mensagem_grupo(mensagem)
                 enviado = privado and grupo
+                if tipo_alerta == "LOG" and int(row.get("Contador de log", 0)) >= 2:
+                    enviado = enviado and enviar_mensagem(tecnico["TELEFONE_GESTOR"], mensagem)
             else:
                 enviado = False
 
             if enviado:
-                cache_envios.add(chave)
+                registrar_alerta_enviado(SHEET, hoje, login, contrato, tipo_alerta)
+                alertas_enviados.add(chave)
                 enviados += 1
             else:
                 falhas += 1
