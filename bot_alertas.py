@@ -13,7 +13,7 @@ HEADERS = {
     "Client-Token": CLIENT_TOKEN
 }
 
-GRUPO_ID = "120363401162031107"  # ID sem @g.us
+GRUPO_ID = "120363401162031107@g.us"  # Corrigido: agora com @g.us
 
 # Cache diário de envios para evitar duplicidade
 cache_envios = set()
@@ -31,7 +31,8 @@ def enviar_mensagem_grupo(mensagem):
         payload = {"phone": GRUPO_ID, "message": mensagem}
         response = requests.post(f"{BASE_URL}/send-text", json=payload, headers=HEADERS)
         return response.status_code == 200
-    except:
+    except Exception as e:
+        print(f"Erro ao enviar para grupo: {e}")
         return False
 
 def obter_tecnico(login, df_tecnicos):

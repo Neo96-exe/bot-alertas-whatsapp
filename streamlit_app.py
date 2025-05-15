@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from bot_alertas import processar_alertas, enviar_mensagem
+from bot_alertas import processar_alertas, enviar_mensagem, enviar_mensagem_grupo
 
 st.set_page_config(page_title="Bot de Alertas - WhatsApp", layout="wide")
 
@@ -76,12 +76,19 @@ if df_toa is not None:
     st.markdown("---")
     st.subheader("💬 Envio manual de mensagens")
 
-    # Botão 1: Teste
+    # Botão 1: Teste individual
     if st.button("🧪 Enviar mensagem de teste"):
         if enviar_mensagem("5521959309325", "🚀 Teste de envio via Bot de Alertas - WhatsApp"):
             st.success("✅ Mensagem de teste enviada com sucesso.")
         else:
             st.error("❌ Falha ao enviar a mensagem.")
+
+    # Botão 1.1: Teste no grupo
+    if st.button("🧪 Enviar mensagem de teste no grupo"):
+        if enviar_mensagem_grupo("[TESTE] Mensagem enviada no grupo com sucesso via Z-API"):
+            st.success("✅ Mensagem enviada no grupo com sucesso.")
+        else:
+            st.error("❌ Falha ao enviar mensagem no grupo.")
 
     # Botão 2: Envio em massa
     st.markdown("### 📢 Enviar mensagem para grupo de contatos")
