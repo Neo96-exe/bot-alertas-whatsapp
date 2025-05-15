@@ -153,11 +153,15 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
                 falhas += 1
             total += 1
 
-    return enviados, falhas, total
+    return enviados, falhas, total, df_resumo
 
-def enviar_todos_os_alertas(df_toa, df_tecnicos):
-    totais = {"IQI": 0, "NR35": 0, "LOG": 0, "CERTIDAO": 0}
-    for tipo in totais.keys():
-        enviados, _, _ = processar_alertas(df_toa, df_tecnicos, tipo)
-        totais[tipo] = enviados
-    return totais
+    # Geração do DataFrame resumo (área, suporte, gestão)
+    df_resumo = (
+        df_filtrado.merge(df_tecnicos, left_on="Login do Técnico", right_on="LOGIN", how="left")
+        .groupby(["Área de Trabalho", "SUPORTE", "GESTOR"])
+        .size()
+        .reset_index(name="Qtd Alertas")
+    )
+
+    return enviados, falhas, total, df_resumo
+
