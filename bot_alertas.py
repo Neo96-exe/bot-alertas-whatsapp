@@ -15,24 +15,30 @@ HEADERS = {
 
 GRUPO_ID = "120363401162031107"  # ID sem @g.us
 
-# Controle diário
-alertas_enviados = set()
+# Cache diário de envios para evitar duplicidade
+cache_envios = set()
 
 def enviar_mensagem(numero, mensagem):
-    payload = {"phone": numero, "message": mensagem}
-    response = requests.post(f"{BASE_URL}/send-text", json=payload, headers=HEADERS)
-    return response.status_code == 200
+    try:
+        payload = {"phone": numero, "message": mensagem}
+        response = requests.post(f"{BASE_URL}/send-text", json=payload, headers=HEADERS)
+        return response.status_code == 200
+    except:
+        return False
 
 def enviar_mensagem_grupo(mensagem):
-    payload = {"phone": GRUPO_ID, "message": mensagem}
-    response = requests.post(f"{BASE_URL}/send-text", json=payload, headers=HEADERS)
-    return response.status_code == 200
+    try:
+        payload = {"phone": GRUPO_ID, "message": mensagem}
+        response = requests.post(f"{BASE_URL}/send-text", json=payload, headers=HEADERS)
+        return response.status_code == 200
+    except:
+        return False
 
 def obter_tecnico(login, df_tecnicos):
     return df_tecnicos[df_tecnicos["LOGIN"] == login.upper()].iloc[0]
 
 def gerar_alertas_log(log_count):
-    return "⚠️" * int(log_count)
+    return "!" * int(log_count)
 
 def formatar_mensagem(tipo, tecnico, contrato, area, endereco, inicio, janela, log_count=0):
     hierarquia = f"""Gestor: {tecnico['GESTOR']}
@@ -41,9 +47,9 @@ Fiscal: {tecnico['FISCAL']}
 Técnico: {tecnico['NOME']}"""
 
     marcacoes = f"@{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']}"
-    
+
     if tipo == "IQI":
-        return f"""🛠️ *Alerta de Autoinspeção (IQI)*
+        return f"""[Alerta de Autoinspeção - IQI]
 
 Atenção ao processo de autoinspeção e ao padrão de instalação. Seguir dentro das normas da Claro, o contrato será auditado dentro de 5 dias.
 
@@ -55,10 +61,10 @@ Início: {inicio}
 Janela: {janela}
 {marcacoes}
 
-⚠️ Contratos pontuados pelo IQI geram medida disciplinar caso não estejam dentro da regra de execução. Qualquer pendência, sinalizar ao fiscal e suporte imediatamente."""
+Contratos pontuados pelo IQI geram medida disciplinar caso não estejam dentro da regra de execução. Qualquer pendência, sinalizar ao fiscal e suporte imediatamente."""
 
     elif tipo == "NR35":
-        return f"""🪜 *Contrato Aderente ao Processo NR35*
+        return f"""[Contrato Aderente ao Processo NR35]
 
 Detectado uso de escada neste contrato. Certifique-se de seguir corretamente os protocolos de segurança NR35 definidos pela Claro.
 
@@ -70,11 +76,11 @@ Início: {inicio}
 Janela: {janela}
 @{tecnico['TELEFONE_TECNICO']}
 
-⚠️ Atenção ao acionamento do botão escada no app Nota 10 e o mais importante: atenção à sua segurança."""
+Atenção ao acionamento do botão escada no app Nota 10 e o mais importante: atenção à sua segurança."""
 
     elif tipo == "LOG":
         alertas = gerar_alertas_log(log_count)
-        return f"""🔁 *Contrato com LOG para Validação* {alertas}
+        return f"""[Contrato com LOG para Validação] {alertas}
 
 Contrato com histórico de retorno identificado. Revisar a execução e garantir que esteja dentro dos padrões.
 
@@ -87,11 +93,11 @@ Janela: {janela}
 Contador de LOG: {log_count}
 {marcacoes} @{tecnico['TELEFONE_GESTOR']}
 
-⚠️ Contratos com retorno devem ser validados criteriosamente para evitar reincidência.
-⚠️ Sair do local *somente após validar com o fiscal/suporte responsáveis* que todos os serviços estão funcionando."""
+Contratos com retorno devem ser validados criteriosamente para evitar reincidência.
+Sair do local somente após validar com o fiscal/suporte responsáveis que todos os serviços estão funcionando."""
 
     elif tipo == "CERTIDAO":
-        return f"""📝 *Certidão de Atendimento Obrigatória*
+        return f"""[Certidão de Atendimento Obrigatória]
 
 Contrato iniciado. Realizar a certidão conforme padrão Claro para evitar retorno técnico.
 
@@ -103,7 +109,7 @@ Início: {inicio}
 Janela: {janela}
 @{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_FISCAL']}
 
-⚠️ Atenção: certidões devem ser preenchidas para todos os contratos iniciados, conforme orientações de qualidade."""
+Certidões devem ser preenchidas para todos os contratos iniciados, conforme orientações de qualidade."""
 
 def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
     enviados, falhas, total = 0, 0, 0
@@ -132,8 +138,9 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
     for _, row in df_filtrado.iterrows():
         contrato = row["Contrato"]
         login = row["Login do Técnico"]
-        chave = f"{tipo_alerta}_{contrato}_{login}_{hoje}"
-        if chave in alertas_enviados:
+        chave = (hoje, login, contrato, tipo_alerta)
+
+        if chave in cache_envios:
             continue
 
         try:
@@ -158,7 +165,7 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
                 enviado = False
 
             if enviado:
-                alertas_enviados.add(chave)
+                cache_envios.add(chave)
                 enviados += 1
             else:
                 falhas += 1
@@ -167,7 +174,6 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
         except Exception:
             falhas += 1
 
-    # Resumo por área
     try:
         if not df_filtrado.empty:
             df_agrupado = df_filtrado.merge(df_tecnicos, left_on="Login do Técnico", right_on="LOGIN", how="left")
