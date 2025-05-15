@@ -2,22 +2,30 @@ import pandas as pd
 from datetime import datetime
 import requests
 
-# Z-API CONFIG
-ZAPI_URL = "https://api.z-api.io/instances/3E11C001D24090423EED3EF0F02679BC/token/ACB36F2DA2CAE524DC7ECA59/send-text"
+# CONFIGURAÇÕES DA Z-API
+ZAPI_ID = "3E11C001D24090423EED3EF0F02679BC"
+ZAPI_TOKEN = "ACB36F2DA2CAE524DC7ECA59"
 CLIENT_TOKEN = "F60283feb8a754753aad942f9fcc2c8f0S"
-HEADERS = {"Client-Token": CLIENT_TOKEN}
-GRUPO_ID = "120363401162031107@g.us"
 
+BASE_URL = f"https://api.z-api.io/instances/{ZAPI_ID}/token/{ZAPI_TOKEN}"
+HEADERS = {
+    "Content-Type": "application/json",
+    "Client-Token": CLIENT_TOKEN
+}
+
+GRUPO_ID = "120363401162031107"  # ID sem @g.us
+
+# Controle diário
 alertas_enviados = set()
 
 def enviar_mensagem(numero, mensagem):
     payload = {"phone": numero, "message": mensagem}
-    response = requests.post(ZAPI_URL, json=payload, headers=HEADERS)
+    response = requests.post(f"{BASE_URL}/send-text", json=payload, headers=HEADERS)
     return response.status_code == 200
 
-def enviar_grupo(mensagem):
-    payload = {"chatId": GRUPO_ID, "message": mensagem}
-    response = requests.post(ZAPI_URL, json=payload, headers=HEADERS)
+def enviar_mensagem_grupo(mensagem):
+    payload = {"phone": GRUPO_ID, "message": mensagem}
+    response = requests.post(f"{BASE_URL}/send-text", json=payload, headers=HEADERS)
     return response.status_code == 200
 
 def obter_tecnico(login, df_tecnicos):
@@ -27,14 +35,13 @@ def gerar_alertas_log(log_count):
     return "⚠️" * int(log_count)
 
 def formatar_mensagem(tipo, tecnico, contrato, area, endereco, inicio, janela, log_count=0):
-    hierarquia = f"""
-Gestor: {tecnico['GESTOR']}
+    hierarquia = f"""Gestor: {tecnico['GESTOR']}
 Suporte: {tecnico['SUPORTE']}
 Fiscal: {tecnico['FISCAL']}
-Técnico: {tecnico['NOME']}
-"""
+Técnico: {tecnico['NOME']}"""
 
-    marcacoes = f"@{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']} @{tecnico['TELEFONE_GESTOR']}"
+    marcacoes = f"@{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']}"
+    
     if tipo == "IQI":
         return f"""🛠️ *Alerta de Autoinspeção (IQI)*
 
@@ -51,7 +58,7 @@ Janela: {janela}
 ⚠️ Contratos pontuados pelo IQI geram medida disciplinar caso não estejam dentro da regra de execução. Qualquer pendência, sinalizar ao fiscal e suporte imediatamente."""
 
     elif tipo == "NR35":
-        return f"""🪜 *Contrato Aderente ao Processo NR35* 
+        return f"""🪜 *Contrato Aderente ao Processo NR35*
 
 Detectado uso de escada neste contrato. Certifique-se de seguir corretamente os protocolos de segurança NR35 definidos pela Claro.
 
@@ -78,7 +85,7 @@ Endereço: {endereco}
 Início: {inicio}
 Janela: {janela}
 Contador de LOG: {log_count}
-{marcacoes}
+{marcacoes} @{tecnico['TELEFONE_GESTOR']}
 
 ⚠️ Contratos com retorno devem ser validados criteriosamente para evitar reincidência.
 ⚠️ Sair do local *somente após validar com o fiscal/suporte responsáveis* que todos os serviços estão funcionando."""
@@ -103,6 +110,7 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
     hoje = datetime.now().strftime("%Y-%m-%d")
     df_resumo = pd.DataFrame()
 
+    # Filtros por tipo
     if tipo_alerta == "IQI":
         filtro = (df_toa["Status da Atividade"].str.lower() == "iniciado") & \
                  (df_toa["Tipo O.S 1"].str.lower().str.contains("adesao")) & \
@@ -131,13 +139,8 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
         try:
             tecnico = obter_tecnico(login, df_tecnicos)
             mensagem = formatar_mensagem(
-                tipo_alerta,
-                tecnico,
-                contrato,
-                row["Área de Trabalho"],
-                row["Endereço"],
-                row["Início"],
-                row["Janela de Serviço"],
+                tipo_alerta, tecnico, contrato, row["Área de Trabalho"],
+                row["Endereço"], row["Início"], row["Janela de Serviço"],
                 int(row.get("Contador de log", 0))
             )
 
@@ -149,7 +152,7 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
                     enviar_mensagem(tecnico["TELEFONE_SUPORTE"], mensagem),
                     enviar_mensagem(tecnico["TELEFONE_FISCAL"], mensagem)
                 ])
-                grupo = enviar_grupo(mensagem)
+                grupo = enviar_mensagem_grupo(mensagem)
                 enviado = privado and grupo
             else:
                 enviado = False
@@ -164,6 +167,7 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
         except Exception:
             falhas += 1
 
+    # Resumo por área
     try:
         if not df_filtrado.empty:
             df_agrupado = df_filtrado.merge(df_tecnicos, left_on="Login do Técnico", right_on="LOGIN", how="left")
