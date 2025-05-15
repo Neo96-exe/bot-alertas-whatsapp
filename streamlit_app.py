@@ -1,167 +1,72 @@
+import streamlit as st
 import pandas as pd
-import requests
 from datetime import datetime
+from bot_alertas import processar_alertas
 
-# Configurações da API Z-API
-ZAPI_ID = "3E11C001D24090423EED3EF0F02679BC"
-ZAPI_TOKEN = "ACB36F2DA2CAE524DC7ECA59"
-ZAPI_CLIENT_TOKEN = "F60283feb8a754753aad942f9fcc2c8f0S"
-ZAPI_URL = f"https://api.z-api.io/instances/{ZAPI_ID}/token/{ZAPI_TOKEN}/send-text"
-GRUPO_ID = "120363401162031107@g.us"
-NUM_TESTE = "5521959309325"
+st.set_page_config(page_title="Bot de Alertas - WhatsApp", layout="wide")
 
-# Controle de alertas únicos
-alertas_enviados = set()
+st.markdown("""
+    <style>
+        .main {background-color: #f7f9fa;}
+        .title {font-size:40px; font-weight:700; color:#1a73e8;}
+        .alert-box {background-color:#ffffff;border-radius:10px;padding:20px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+        .metric {font-size:30px;font-weight:600;}
+    </style>
+""", unsafe_allow_html=True)
 
-def enviar_mensagem(numero, mensagem):
-    headers = {"Client-Token": ZAPI_CLIENT_TOKEN}
-    payload = {"phone": numero, "message": mensagem}
-    response = requests.post(ZAPI_URL, json=payload, headers=headers)
-    return response.status_code == 200
+st.markdown("<div class='title'>📢 Bot de Alertas - WhatsApp</div>", unsafe_allow_html=True)
+st.markdown("**Gerencie e dispare alertas automatizados para a operação via WhatsApp.**")
 
-def enviar_mensagem_grupo(mensagem):
-    headers = {"Client-Token": ZAPI_CLIENT_TOKEN}
-    payload = {"chatId": GRUPO_ID, "message": mensagem}
-    response = requests.post(ZAPI_URL, json=payload, headers=headers)
-    return response.status_code == 200
+# Upload de arquivos
+uploaded_toa = st.file_uploader("📎 Carregar extração TOA (.xlsx obrigatório)", type="xlsx")
+uploaded_tecnicos = st.file_uploader("📎 Atualizar base de técnicos (opcional)", type=["xlsx", "csv"])
 
-def formatar_mensagem(tipo, tecnico, contrato, area, endereco, inicio, janela, log_count=0):
-    marcacoes = f"@{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']}"
-    if tipo == "IQI":
-        return f"""🛠️ *Alerta de Autoinspeção (IQI)*
+# Leitura de arquivos
+df_toa, df_tecnicos = None, None
+if uploaded_toa:
+    df_toa = pd.read_excel(uploaded_toa, engine="openpyxl")
 
-Atenção ao processo de autoinspeção e ao padrão de instalação. Seguir dentro das normas da Claro, o contrato será auditado dentro de 5 dias.
-
-📌 Técnico: {tecnico['NOME']}
-Contrato: {contrato}
-Área: {area}
-Endereço: {endereco}
-Início: {inicio}
-Janela: {janela}
-{marcacoes}
-
-⚠️ Contratos pontuados pelo IQI geram medida disciplinar caso não estejam dentro da regra de execução. Qualquer pendência, sinalizar ao fiscal e suporte imediatamente.
-"""
-    elif tipo == "NR35":
-        return f"""🪜 *Contrato Aderente ao Processo NR35* 
-
-Detectado uso de escada neste contrato. Certifique-se de seguir corretamente os protocolos de segurança NR35 definidos pela Claro.
-
-📌 Técnico: {tecnico['NOME']}
-Contrato: {contrato}
-Área: {area}
-Endereço: {endereco}
-Início: {inicio}
-Janela: {janela}
-{marcacoes}
-
-⚠️ Atenção ao acionamento do botão escada no app Nota 10 e o mais importante: atenção à sua segurança.
-"""
-    elif tipo == "LOG":
-        extra = f"@{tecnico['TELEFONE_GESTOR']}" if log_count >= 2 else ""
-        return f"""🔁 *Contrato com LOG para Validação*
-
-Contrato com histórico de retorno identificado. Revisar a execução e garantir que esteja dentro dos padrões.
-
-📌 Técnico: {tecnico['NOME']}
-Contrato: {contrato}
-Área: {area}
-Endereço: {endereco}
-Início: {inicio}
-Janela: {janela}
-Contador de LOG: {log_count}
-{marcacoes} {extra}
-
-⚠️ Contratos com retorno devem ser validados criteriosamente para evitar reincidência.
-"""
-    elif tipo == "CERTIDAO":
-        return f"""📄 *Certidão de Atendimento Obrigatória*
-
-Este contrato está com status iniciado e deve obrigatoriamente conter evidência via Certidão de Atendimento, conforme norma da Claro.
-
-📌 Técnico: {tecnico['NOME']}
-Contrato: {contrato}
-Área: {area}
-Endereço: {endereco}
-Início: {inicio}
-Janela: {janela}
-@{tecnico['TELEFONE_FISCAL']}
-
-⚠️ A certidão deve ser gerada ainda durante o atendimento. Em caso de dúvida, sinalizar ao fiscal.
-"""
-
-def obter_tecnico(login, df_tecnicos):
-    return df_tecnicos[df_tecnicos["LOGIN"] == login.upper()].iloc[0]
-
-def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
-    enviados = 0
-    falhas = 0
-    total = 0
-    hoje = datetime.now().strftime("%Y-%m-%d")
-
-    if tipo_alerta == "IQI":
-        filtro = (df_toa["Status da Atividade"].str.lower() == "iniciado") & \
-                 (df_toa["Tipo O.S 1"].str.lower().str.contains("adesao")) & \
-                 (df_toa[[col for col in df_toa.columns if "Cód de Baixa" in col]].isnull().all(axis=1))
-
-    elif tipo_alerta == "NR35":
-        filtro = (df_toa["Status da Atividade"].str.lower() == "iniciado") & \
-                 (df_toa["Habilidade de Trabalho"].str.contains("Escada", case=False, na=False))
-
-    elif tipo_alerta == "LOG":
-        filtro = (df_toa["Status da Atividade"].str.lower() == "iniciado") & \
-                 (df_toa["Tipo O.S 1"].str.contains("69", na=False)) & \
-                 (df_toa["Contador de log"].fillna(0).astype(int) > 0)
-
-    elif tipo_alerta == "CERTIDAO":
-        filtro = (df_toa["Status da Atividade"].str.lower() == "iniciado")
-
+if uploaded_tecnicos:
+    if uploaded_tecnicos.name.endswith(".csv"):
+        df_tecnicos = pd.read_csv(uploaded_tecnicos, delimiter=";", encoding="utf-8", on_bad_lines="skip")
     else:
-        return enviados, falhas, total  # tipo inválido
+        df_tecnicos = pd.read_excel(uploaded_tecnicos, engine="openpyxl")
 
-    df_filtrado = df_toa[filtro]
+if df_toa is not None:
+    st.markdown("---")
+    col1, col2, col3, col4 = st.columns(4)
 
-    agrupado = df_filtrado.groupby(df_filtrado["SUPORTE"] if "SUPORTE" in df_filtrado.columns else "Login do Técnico")
+    with col1:
+        if st.button("🚨 Alerta de IQI"):
+            enviados, falhas, total, df_resumo = processar_alertas(df_toa.copy(), df_tecnicos, "IQI")
+            st.success(f"✅ Mensagens IQI: {enviados} enviadas / {falhas} falhas (Total: {total})")
 
-    for suporte, grupo in agrupado:
-        for _, row in grupo.iterrows():
-            contrato = row["Contrato"]
-            login = row["Login do Técnico"]
-            chave_alerta = f"{tipo_alerta}_{contrato}_{login}_{hoje}"
-            if chave_alerta in alertas_enviados:
-                continue
-            try:
-                tecnico = obter_tecnico(login, df_tecnicos)
-                mensagem = formatar_mensagem(
-                    tipo_alerta, tecnico, contrato,
-                    row["Área de Trabalho"], row["Endereço"],
-                    row["Início"], row["Janela de Serviço"],
-                    int(row.get("Contador de log", 0))
-                )
-                # Envia para privado do técnico, suporte, fiscal
-                for numero in [
-                    tecnico["TELEFONE_TECNICO"],
-                    tecnico["TELEFONE_SUPORTE"],
-                    tecnico["TELEFONE_FISCAL"],
-                ]:
-                    enviar_mensagem(numero, mensagem)
-                # Envia no grupo
-                enviar_mensagem_grupo(mensagem)
-                alertas_enviados.add(chave_alerta)
-                enviados += 1
-            except Exception as e:
-                falhas += 1
-            total += 1
+    with col2:
+        if st.button("🪜 Alerta de NR35"):
+            enviados, falhas, total, df_resumo = processar_alertas(df_toa.copy(), df_tecnicos, "NR35")
+            st.success(f"✅ Mensagens NR35: {enviados} enviadas / {falhas} falhas (Total: {total})")
 
-    return enviados, falhas, total, df_resumo
+    with col3:
+        if st.button("🔁 Alerta de LOG"):
+            enviados, falhas, total, df_resumo = processar_alertas(df_toa.copy(), df_tecnicos, "LOG")
+            st.success(f"✅ Mensagens LOG: {enviados} enviadas / {falhas} falhas (Total: {total})")
 
-    # Geração do DataFrame resumo (área, suporte, gestão)
-    df_resumo = (
-        df_filtrado.merge(df_tecnicos, left_on="Login do Técnico", right_on="LOGIN", how="left")
-        .groupby(["Área de Trabalho", "SUPORTE", "GESTOR"])
-        .size()
-        .reset_index(name="Qtd Alertas")
-    )
+    with col4:
+        if st.button("📄 Alerta Certidão de Atendimento"):
+            enviados, falhas, total, df_resumo = processar_alertas(df_toa.copy(), df_tecnicos, "CERTIDAO")
+            st.success(f"✅ Mensagens Certidão: {enviados} enviadas / {falhas} falhas (Total: {total})")
 
-    return enviados, falhas, total, df_resumo
+    st.markdown("---")
+    if 'df_resumo' in locals():
+        st.markdown("### 📊 Quantidade de alertas enviados por Área / Suporte / Gestão")
+        st.dataframe(df_resumo, use_container_width=True)
 
+    if st.button("🚀 Enviar TODOS os alertas"):
+        total_alertas = 0
+        for tipo in ["IQI", "NR35", "LOG", "CERTIDAO"]:
+            enviados, falhas, total, _ = processar_alertas(df_toa.copy(), df_tecnicos, tipo)
+            total_alertas += enviados
+        st.success(f"Todos os alertas foram processados. Total enviados: {total_alertas}")
+
+else:
+    st.warning("⚠️ Por favor, carregue uma extração TOA para iniciar.")
