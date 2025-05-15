@@ -34,7 +34,7 @@ Fiscal: {tecnico['FISCAL']}
 Técnico: {tecnico['NOME']}
 """
 
-    marcacoes = f"@{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']}"
+    marcacoes = f"@{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']} @{tecnico['TELEFONE_GESTOR']}"
     if tipo == "IQI":
         return f"""🛠️ *Alerta de Autoinspeção (IQI)*
 
@@ -78,7 +78,7 @@ Endereço: {endereco}
 Início: {inicio}
 Janela: {janela}
 Contador de LOG: {log_count}
-{marcacoes} @{tecnico['TELEFONE_GESTOR']}
+{marcacoes}
 
 ⚠️ Contratos com retorno devem ser validados criteriosamente para evitar reincidência.
 ⚠️ Sair do local *somente após validar com o fiscal/suporte responsáveis* que todos os serviços estão funcionando."""
@@ -103,7 +103,6 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
     hoje = datetime.now().strftime("%Y-%m-%d")
     df_resumo = pd.DataFrame()
 
-    # filtros
     if tipo_alerta == "IQI":
         filtro = (df_toa["Status da Atividade"].str.lower() == "iniciado") & \
                  (df_toa["Tipo O.S 1"].str.lower().str.contains("adesao")) & \
@@ -142,7 +141,6 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
                 int(row.get("Contador de log", 0))
             )
 
-            # regras de envio
             if tipo_alerta in ["NR35", "CERTIDAO"]:
                 enviado = enviar_mensagem(tecnico["TELEFONE_TECNICO"], mensagem)
             elif tipo_alerta in ["IQI", "LOG"]:
@@ -166,7 +164,6 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
         except Exception:
             falhas += 1
 
-    # resumo por área
     try:
         if not df_filtrado.empty:
             df_agrupado = df_filtrado.merge(df_tecnicos, left_on="Login do Técnico", right_on="LOGIN", how="left")
