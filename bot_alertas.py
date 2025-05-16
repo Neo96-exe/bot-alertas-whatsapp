@@ -17,7 +17,7 @@ HEADERS = {
     "Client-Token": CLIENT_TOKEN
 }
 
-GRUPO_ID = "120363401162031107-group"
+GRUPO_ID = "120363401162031107@g.us"
 
 # ==================== GOOGLE SHEETS ====================
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -182,13 +182,11 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
             if tipo_alerta in ["NR35", "CERTIDAO"]:
                 enviado = enviar_mensagem(tecnico["TELEFONE_TECNICO"], mensagem)
             elif tipo_alerta in ["IQI", "LOG"]:
-                privado = all([
+                enviado = all([
                     enviar_mensagem(tecnico["TELEFONE_TECNICO"], mensagem),
                     enviar_mensagem(tecnico["TELEFONE_SUPORTE"], mensagem),
                     enviar_mensagem(tecnico["TELEFONE_FISCAL"], mensagem)
                 ])
-                grupo = enviar_mensagem_grupo(mensagem, telefones_mencao)
-                enviado = privado and grupo
                 if tipo_alerta == "LOG" and int(row.get("Contador de log", 0)) >= 2:
                     enviado = enviado and enviar_mensagem(tecnico["TELEFONE_GESTOR"], mensagem)
             else:
