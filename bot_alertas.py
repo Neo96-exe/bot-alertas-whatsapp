@@ -67,65 +67,70 @@ Suporte: {tecnico['SUPORTE']}
 Fiscal: {tecnico['FISCAL']}
 Técnico: {tecnico['NOME']}"""
 
-    marcacoes = f"@{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']} @{tecnico['TELEFONE_GESTOR']}"
+    marcacoes = f"@{tecnico['TELEFONE_GESTOR']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']} @{tecnico['TELEFONE_TECNICO']}"
 
     if tipo == "IQI":
-        return f"""Atenção ao processo de autoinspeção e ao padrão de instalação. Seguir dentro das normas da Claro, o contrato será auditado dentro de 5 dias.
+        return f"""[Alerta contrato aderente ao IQI]
 
-📌 Técnico: {tecnico['NOME']}
+Atenção ao processo de autoinspeção e ao padrão de instalação. Seguir dentro das normas da Claro, o contrato será auditado dentro de 5 dias.
+
+{hierarquia}
+
 Contrato: {contrato}
 Área: {area}
 Endereço: {endereco}
 Início: {inicio}
 Janela: {janela}
+
 {marcacoes}
 
-Atenção, contratos pontuados pelo IQI geram medida disciplinar caso não estejam dentro da regra de execução. Qualquer pendência, sinalizar ao fiscal e suporte imediatamente."""
-
-    elif tipo == "NR35":
-        return f"""[Contrato Aderente ao Processo NR35]
-
-Detectado uso de escada neste contrato. Certifique-se de seguir corretamente os protocolos de segurança NR35 definidos pela Claro.
-
-📌 Técnico: {tecnico['NOME']}
-Contrato: {contrato}
-Área: {area}
-Endereço: {endereco}
-Início: {inicio}
-Janela: {janela}
-@{tecnico['TELEFONE_TECNICO']}
-
-Atenção ao acionamento do botão escada no app Nota 10 e o mais importante: atenção à sua segurança."""
+Atenção, contratos pontuados pelo IQI geram medida disciplinar caso não estejam dentro da regra de execução. Qualquer pendência sinalizar ao fiscal e suporte imediato."""
 
     elif tipo == "LOG":
         alertas = gerar_alertas_log(log_count)
-        return f"""{alertas} Alerta de retorno ofensivo.
+        return f"""{alertas} Alerta de Retorno com LOG
 
-📌 Técnico: {tecnico['NOME']}
+{hierarquia}
+
 Contrato: {contrato}
 Área: {area}
 Endereço: {endereco}
 Início: {inicio}
 Janela: {janela}
-Contador de LOG: {log_count}
+
 {marcacoes}
 
-O contrato possui {log_count} LOG(s). Verificar o padrão de instalação, organização, etiquetação, checklist de evidência e validação em campo. Medidas disciplinares serão aplicadas em reincidências."""
+Esse contrato já apresenta histórico de retorno. Reforce com o técnico a correta execução. Casos reincidentes impactam diretamente na operação."""
 
-    elif tipo == "CERTIDAO":
-        return f"""[Certidão de Atendimento Obrigatória]
+    elif tipo == "NR35":
+        return f"""🪜 Contrato aderente ao processo NR35
 
-Contrato iniciado. Realizar a certidão conforme padrão Claro para evitar retorno técnico.
+{hierarquia}
 
-📌 Técnico: {tecnico['NOME']}
 Contrato: {contrato}
 Área: {area}
 Endereço: {endereco}
 Início: {inicio}
 Janela: {janela}
-@{tecnico['TELEFONE_TECNICO']} @{tecnico['TELEFONE_FISCAL']}
 
-Certidões devem ser preenchidas para todos os contratos iniciados, conforme orientações de qualidade."""
+{marcacoes}
+
+Contrato iniciado com uso de escada. Atenção redobrada aos procedimentos de segurança!"""
+
+    elif tipo == "CERTIDAO":
+        return f"""📄 Contrato requer Certidão de Atendimento
+
+{hierarquia}
+
+Contrato: {contrato}
+Área: {area}
+Endereço: {endereco}
+Início: {inicio}
+Janela: {janela}
+
+{marcacoes}
+
+Todos os contratos produtivos devem conter evidências da Certidão de Atendimento. Suba as fotos no grupo de evidências até o fim do dia."""
 
 def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
     enviados, falhas, total = 0, 0, 0
