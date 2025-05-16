@@ -46,9 +46,13 @@ def enviar_mensagem(numero, mensagem):
     except:
         return False
 
-def enviar_mensagem_grupo(mensagem):
+def enviar_mensagem_grupo(mensagem, telefones_mention=[]):
     try:
-        payload = {"phone": GRUPO_ID, "message": mensagem}
+        payload = {
+            "chatId": GRUPO_ID,
+            "message": mensagem,
+            "mentioned": [f"{t}@c.us" for t in telefones_mention]
+        }
         response = requests.post(f"{BASE_URL}/send-text", json=payload, headers=HEADERS)
         return response.status_code == 200
     except:
@@ -67,10 +71,16 @@ Suporte: {tecnico['SUPORTE']}
 Fiscal: {tecnico['FISCAL']}
 Técnico: {tecnico['NOME']}"""
 
-    marcacoes = f"@{tecnico['TELEFONE_GESTOR']} @{tecnico['TELEFONE_SUPORTE']} @{tecnico['TELEFONE_FISCAL']} @{tecnico['TELEFONE_TECNICO']}"
+    mencao_telefones = [
+        tecnico["TELEFONE_GESTOR"],
+        tecnico["TELEFONE_SUPORTE"],
+        tecnico["TELEFONE_FISCAL"],
+        tecnico["TELEFONE_TECNICO"]
+    ]
+    marcacoes = " ".join([f"@{t}" for t in mencao_telefones])
 
     if tipo == "IQI":
-        return f"""[Alerta contrato aderente ao IQI]
+        mensagem = f"""[Alerta contrato aderente ao IQI]
 
 Atenção ao processo de autoinspeção e ao padrão de instalação. Seguir dentro das normas da Claro, o contrato será auditado dentro de 5 dias.
 
@@ -85,10 +95,9 @@ Janela: {janela}
 {marcacoes}
 
 Atenção, contratos pontuados pelo IQI geram medida disciplinar caso não estejam dentro da regra de execução. Qualquer pendência sinalizar ao fiscal e suporte imediato."""
-
     elif tipo == "LOG":
         alertas = gerar_alertas_log(log_count)
-        return f"""{alertas} Alerta de Retorno com LOG
+        mensagem = f"""{alertas} Alerta de Retorno com LOG
 
 {hierarquia}
 
@@ -101,9 +110,8 @@ Janela: {janela}
 {marcacoes}
 
 Esse contrato já apresenta histórico de retorno. Reforce com o técnico a correta execução. Casos reincidentes impactam diretamente na operação."""
-
     elif tipo == "NR35":
-        return f"""🪜 Contrato aderente ao processo NR35
+        mensagem = f"""🪜 Contrato aderente ao processo NR35
 
 {hierarquia}
 
@@ -116,9 +124,8 @@ Janela: {janela}
 {marcacoes}
 
 Contrato iniciado com uso de escada. Atenção redobrada aos procedimentos de segurança!"""
-
     elif tipo == "CERTIDAO":
-        return f"""📄 Contrato requer Certidão de Atendimento
+        mensagem = f"""📄 Contrato requer Certidão de Atendimento
 
 {hierarquia}
 
@@ -131,6 +138,7 @@ Janela: {janela}
 {marcacoes}
 
 Todos os contratos produtivos devem conter evidências da Certidão de Atendimento. Suba as fotos no grupo de evidências até o fim do dia."""
+    return mensagem, mencao_telefones
 
 def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
     enviados, falhas, total = 0, 0, 0
@@ -165,7 +173,7 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
 
         try:
             tecnico = obter_tecnico(login, df_tecnicos)
-            mensagem = formatar_mensagem(
+            mensagem, telefones_mencao = formatar_mensagem(
                 tipo_alerta, tecnico, contrato, row["Área de Trabalho"],
                 row["Endereço"], row["Início"], row["Janela de Serviço"],
                 int(row.get("Contador de log", 0))
@@ -179,7 +187,7 @@ def processar_alertas(df_toa, df_tecnicos, tipo_alerta):
                     enviar_mensagem(tecnico["TELEFONE_SUPORTE"], mensagem),
                     enviar_mensagem(tecnico["TELEFONE_FISCAL"], mensagem)
                 ])
-                grupo = enviar_mensagem_grupo(mensagem)
+                grupo = enviar_mensagem_grupo(mensagem, telefones_mencao)
                 enviado = privado and grupo
                 if tipo_alerta == "LOG" and int(row.get("Contador de log", 0)) >= 2:
                     enviado = enviado and enviar_mensagem(tecnico["TELEFONE_GESTOR"], mensagem)
